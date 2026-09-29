@@ -1,0 +1,57 @@
+name: Terraform Provisioning Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Terraform operation (apply or destroy)'
+        required: false
+        default: 'apply'
+      path:
+        description: 'Subfolder path containing Terraform files'
+        required: false
+        default: 'terraform'
+
+jobs:
+  terraform:
+    name: Terraform Execution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Terraform Init
+        run: |
+          TARGET_DIR="${{ github.event.inputs.path || 'terraform' }}"
+          echo "Working directory: $TARGET_DIR"
+          cd "$TARGET_DIR"
+          terraform init
+
+      - name: Terraform Plan
+        run: |
+          TARGET_DIR="${{ github.event.inputs.path || 'terraform' }}"
+          cd "$TARGET_DIR"
+          if [ "${{ github.event.inputs.operation }}" = "destroy" ]; then
+            terraform plan -destroy -out=plan.out
+          else
+            terraform plan -out=plan.out
+          fi
+
+      - name: Terraform Apply
+        run: |
+          TARGET_DIR="${{ github.event.inputs.path || 'terraform' }}"
+          cd "$TARGET_DIR"
+          terraform apply -auto-approve plan.out
